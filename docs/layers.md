@@ -216,7 +216,7 @@ Note that building geometries, like most geometries in Tilezen tiles, are clippe
 
 * `addr_housenumber`: value from OpenStreetMap's `addr:housenumber` tag
 * `addr_street`: value from OpenStreetMap's `addr:street` tag
-* `area`: in square meters (spherical Mercator, no real-world), `polygon` features only. _See planned bug fix in [#1095](https://github.com/tilezen/vector-datasource/issues/1095)._
+* `area`: in square meters (spherical Mercator, no real-world), `polygon` features only.
 * `building_material`: A description of the material covering the outside of the building or building part, if the information is available. Common values are: `brick`, `cement_block`, `clay`, `concrete`, `glass`, `masonry`, `metal`, `mud`, `other`, `permanent`, `plaster`, `sandstone`, `semi-permanent`, `steel`, `stone`, `timber-framing`, `tin`, `traditional` and `wood`, and there are many other less common values.
 * `height`: in meters, where available
 * `layer`
@@ -228,7 +228,7 @@ Note that building geometries, like most geometries in Tilezen tiles, are clippe
 * `roof_orientation`: from `roof:orientation` tag
 * `roof_shape`: from `roof:shape` tag
 * `scale_rank`: calculation of a feature's importance
-* `volume`: calculated on feature's `area` and `height`, when `height` or `min_height` is available. _See planned bug fix in [#1095](https://github.com/tilezen/vector-datasource/issues/1095)._
+* `volume`: calculated on feature's `area` and `height`, when `height` or `min_height` is available.
 
 #### Building layer `kind` values:
 
@@ -467,7 +467,7 @@ _TIP: Some `landuse` features only exist as point features in OpenStreetMap. Fin
 #### Landuse properties (common):
 
 * `name`
-* `id`: From OpenStreetMap or Natural Earth. Dropped at low- and mid-zooms when features are merged. _See planned bug fix [#1033](https://github.com/tilezen/vector-datasource/issues/1033)._
+* `id`: From OpenStreetMap or Natural Earth. Dropped at low- and mid-zooms when features are merged.
 * `kind`: combination of the `landuse`, `leisure`, `natural`, `highway`, `aeroway`, `amenity`, `tourism`, `zoo`, `attraction`, `man_made`, `power`, and `boundary` OSM tags, or `urban_area` for Natural Earth features. Also includes of some `barrier` and `waterway` tags: `city_wall` (zoom 12+), `dam` (zoom 12+), `power_line` (zoom 14+), `retaining_wall`, `snow_fence` (zoom 15+), `crane`, `fence`, `gate`, `wall` (zoom 16+ only), and `power_minor_line` (zoom 17+).
 * `source`: `openstreetmap.org` or `naturalearthdata.com`
 * `sort_rank`: a suggestion for which order to draw features. The value is an integer where smaller numbers suggest that features should be "behind" features with larger numbers.
@@ -482,7 +482,7 @@ _TIP: Some `landuse` features only exist as point features in OpenStreetMap. Fin
 
 #### Landuse `kind` values:
 
-* `aerodrome`
+* `aerodrome` - with `kind_detail` in `public`, `private`, `military_public`, `airfield`, `international`, `regional`, `gliding`.
 * `airfield`
 * `allotments`
 * `amusement_ride`
@@ -547,7 +547,7 @@ _TIP: Some `landuse` features only exist as point features in OpenStreetMap. Fin
 * `kerb` line.
 * `land`
 * `library`
-* `low_emission_zone` - An area beloging to a low emission zone, such as the (London Low Emission Zone)[https://en.wikipedia.org/wiki/London_low_emission_zone]. (See also)[https://wiki.openstreetmap.org/wiki/Tag:boundary%3Dlow_emission_zone].
+* `low_emission_zone` - An area beloging to a low emission zone, such as the [London Low Emission Zone](https://en.wikipedia.org/wiki/London_low_emission_zone). Check also the [OSM wiki](https://wiki.openstreetmap.org/wiki/Tag:boundary%3Dlow_emission_zone).
 * `maze`
 * `meadow`
 * `military`
@@ -881,7 +881,7 @@ To resolve inconsistency in data tagging in OpenStreetMap we normalize several o
 * `administrative`
 * `adult_gaming_centre`
 * `advertising_agency`
-* `aerodrome`
+* `aerodrome` - with `kind_detail` in `public`, `private`, `military_public`, `airfield`, `international`, `regional`, `gliding`.
 * `aeroway_gate`
 * `airfield` for military use.
 * `airport`
@@ -937,7 +937,7 @@ To resolve inconsistency in data tagging in OpenStreetMap we normalize several o
 * `bus_station`
 * `bus_stop`
 * `butcher`
-* `cafe` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `cafe`
 * `camera` - A shop selling cameras.
 * `camp_site`
 * `car_parts` - A shop selling car parts.
@@ -1019,7 +1019,7 @@ To resolve inconsistency in data tagging in OpenStreetMap we normalize several o
 * `field_hospital` with `kind_detail` property.
 * `financial`
 * `fire_hydrant`
-* `fire_station` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `fire_station`
 * `firepit`
 * `fishing_area`
 * `fishing`
@@ -1038,7 +1038,7 @@ To resolve inconsistency in data tagging in OpenStreetMap we normalize several o
 * `gallery` - An art gallery.
 * `gambling`
 * `garden_centre`
-* `garden` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `garden`
 * `gardener`
 * `gas_canister` - Shop selling bottled gas for cooking. Some offer gas canister refills.
 * `gate` with `kind_detail` property.
@@ -1128,7 +1128,7 @@ To resolve inconsistency in data tagging in OpenStreetMap we normalize several o
 * `ngo`
 * `nightclub`
 * `notary`
-* `nursing_home` with `kind_detail` property. _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `nursing_home` with `kind_detail` property.
 * `obelisk` - A tall structure, usually a monument or memorial. If known, the `kind_detail` will be set to either `monument` or `memorial`.
 * `observatory`
 * `occupational_therapist`
@@ -1141,9 +1141,9 @@ To resolve inconsistency in data tagging in OpenStreetMap we normalize several o
 * `outreach`
 * `paediatrics`
 * `painter`
-* `park` - _See planned bug fixes in [#1081](https://github.com/tilezen/vector-datasource/issues/1081)._
+* `park`
 * `parking_garage` parking type is `multi-storey`, `underground`, or `rooftop`.
-* `parking` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `parking`
 * `peak` A mountain peak. See above for properties available on peaks and volcanos.
 * `perfumery`
 * `pet`
@@ -1159,13 +1159,13 @@ To resolve inconsistency in data tagging in OpenStreetMap we normalize several o
 * `picnic_site`
 * `picnic_table`
 * `pitch` - With `kind_detail` optionally describing the sport. Common values are `baseball`, `basketball`, `football`, `hockey`, `soccer, `tennis`.
-* `place_of_worship` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
-* `plant` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `place_of_worship`
+* `plant`
 * `plaque` - A memorial plaque.
-* `playground` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `playground`
 * `plumber`
 * `podiatrist`
-* `police` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `police`
 * `political_party`
 * `port_terminal`
 * `post_box`
@@ -1196,13 +1196,13 @@ To resolve inconsistency in data tagging in OpenStreetMap we normalize several o
 * `residential_home`
 * `resort`
 * `rest_area`
-* `restaurant` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `restaurant`
 * `rock`
 * `roller_coaster`
 * `saddle`
 * `sanitary_dump_station`
 * `sawmill`
-* `school` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `school`
 * `scuba_diving`
 * `service_area`
 * `shelter`
@@ -1233,7 +1233,7 @@ To resolve inconsistency in data tagging in OpenStreetMap we normalize several o
 * `stonemason`
 * `street_lamp`
 * `studio` - A specialised location for making audio or video recordings. If known, the type will be in `kind_detail`, one of: `audio`, `cinema`, `photography`, `radio`, `television`, `video`.
-* `substation` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `substation`
 * `subway_entrance`
 * `summer_camp`
 * `summer_toboggan`
@@ -1272,13 +1272,13 @@ To resolve inconsistency in data tagging in OpenStreetMap we normalize several o
 * `walking_junction` - Common in Europe for signed walking routes with named junctions. The walking network reference point's `ref` value is derived from one of `iwn_ref`, `nwn_ref`, `rwn_ref` or `lwn_ref`, in descending order and is suitable for naming or use in a shield.
 * `waste_basket`
 * `waste_disposal`
-* `wastewater_plant` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `wastewater_plant`
 * `water_park`
 * `water_point`
 * `water_slide`
 * `water_tower`
 * `water_well` - A location where water can be extracted from the ground. With `kind_detail` property.
-* `water_works` - _See planned bug fixes in [#1085](https://github.com/tilezen/vector-datasource/issues/1085)._
+* `water_works`
 * `waterfall`
 * `watering_place`
 * `watermill` - A structure for using water power to do work. Note that this is different from a modern structure to generate electric power from water, which would be a `generator`. Abandoned or disused features are not shown unless they are attractions, landmarks or other kinds.
@@ -1512,7 +1512,7 @@ The `hgv` property indicates general truck heavy goods vehicle truck access, val
 
 **Roads `hgv_restriction` values:**
 
-For `hgv_restriction` property indicates general truck heavy goods vehicle truck access restrictions, values include: `weight` (metric tonnes), `height` (metres), `length` (metres), `width` (metres), `wpa` (weight per axle, in metric tonnes), `kpra` (king pin to rear axle leght, in metric tonnes), `hazmat` (true if restricted, otherwise omitted), `other` and `multiple` if more than one.
+For `hgv_restriction` property indicates general truck heavy goods vehicle truck access restrictions, values (units vary) include: `weight` (metric tonnes), `height` (metres), `length` (metres), `width` (metres), `wpa` (weight per axle, in metric tonnes), `kpra` (king pin to rear axle length, in metric tonnes), `hazmat` (true if restricted, otherwise omitted), `other` and `multiple` if more than one.
 
 
 #### Roads layer network values
@@ -2290,6 +2290,7 @@ However, if the roads layer does not include `linear_ref_id`, then it should be 
 * `is_bridge`: set to `true` when the linear is a bridge
 * `is_tunnel`: set to `true` when the linear is a tunnel
 * `is_link`: set to true when the linear is a slip-road
+* `is_hov_lane`: set to `true` when the linear is an HOV (High-Occupancy Vechicle) express lane
 
 ## Traffic Incidents
 
@@ -2343,7 +2344,9 @@ However, if the roads layer does not include `linear_ref_id`, then it should be 
 * `is_bridge`: set to `true` when the linear is a bridge
 * `is_tunnel`: set to `true` when the linear is a tunnel
 * `is_link`: set to true when the linear is a slip-road
-* `drives_on_left`: set to `true` when the country drives on the left, e.g. In the U.K
+* `drives_on_left`: set to `true` when the country drives on the left (e.g. in the United Kingdom)
+* `is_hov_lane`: set to `true` when the linear is, or the incident affects, a HOV (High-Occupancy Vechicle) express lane
+
 
 ## Water
 

@@ -192,15 +192,24 @@ def _building_calc_min_levels(min_levels):
     return min_levels
 
 
+# slightly bigger than the tallest structure in the world. at the time
+# of writing, the Burj Khalifa at 829.8m. this is used as a check to make
+# sure that nonsense values (e.g: buildings a million meters tall) don't
+# make it into the data.
+TALLEST_STRUCTURE_METERS = 1000.0
+
+
 def _building_calc_height(height_val, levels_val, levels_calc_fn):
     height = _to_float_meters(height_val)
-    if height is not None:
+    if height is not None and 0 <= height <= TALLEST_STRUCTURE_METERS:
         return height
     levels = _to_float_meters(levels_val)
     if levels is None:
         return None
     levels = levels_calc_fn(levels)
-    return levels
+    if 0 <= levels <= TALLEST_STRUCTURE_METERS:
+        return levels
+    return None
 
 
 def add_id_to_properties(shape, properties, fid, zoom):
@@ -1082,13 +1091,16 @@ def _find_layer(feature_layers, name):
     return None
 
 
-# shared implementation of the intercut algorithm, used
-# both when cutting shapes and using overlap to determine
-# inside / outsideness.
-def _intercut_impl(intersect_func, feature_layers,
-                   base_layer, cutting_layer, attribute,
-                   target_attribute, cutting_attrs,
-                   keep_geom_type):
+# shared implementation of the intercut algorithm, used both when cutting
+# shapes and using overlap to determine inside / outsideness.
+#
+# the filter_fn are used to filter which features from the base layer are cut
+# with which features from the cutting layer. cutting layer features which do
+# not match the filter are ignored, base layer features are left in the layer
+# unchanged.
+def _intercut_impl(intersect_func, feature_layers, base_layer, cutting_layer,
+                   attribute, target_attribute, cutting_attrs, keep_geom_type,
+                   cutting_filter_fn=None, base_filter_fn=None):
     # the target attribute can default to the attribute if
     # they are distinct. but often they aren't, and that's
     # why target_attribute is a separate parameter.
@@ -1116,21 +1128,54 @@ def _intercut_impl(intersect_func, feature_layers,
     base_features = base['features']
     cutting_features = cutting['features']
 
+    # filter out any features that we don't want to cut with
+    if cutting_filter_fn is not None:
+        cutting_features = filter(cutting_filter_fn, cutting_features)
+
+    # short-cut return if there are no cutting features => there's nothing
+    # to do.
+    if not cutting_features:
+        return base
+
     # make a cutter object to help out
     cutter = _Cutter(cutting_features, cutting_attrs,
                      attribute, target_attribute,
                      keep_geom_type, intersect_func)
 
+    skipped_features = []
     for base_feature in base_features:
-        # we use shape to track the current remainder of the
-        # shape after subtracting bits which are inside cuts.
-        shape, props, fid = base_feature
+        if base_filter_fn is None or base_filter_fn(base_feature):
+            # we use shape to track the current remainder of the
+            # shape after subtracting bits which are inside cuts.
+            shape, props, fid = base_feature
 
-        cutter.cut(shape, props, fid)
+            cutter.cut(shape, props, fid)
 
-    base['features'] = cutter.new_features
+        else:
+            skipped_features.append(base_feature)
+
+    base['features'] = cutter.new_features + skipped_features
 
     return base
+
+
+class Where(object):
+    """
+    A "where" clause for filtering features based on their properties.
+
+    This is commonly used in post-processing steps to configure which features
+    in the layer we want to operate on, allowing us to write simple Python
+    expressions in the YAML.
+    """
+
+    def __init__(self, where):
+        self.fn = compile(where, 'queries.yaml', 'eval')
+
+    def __call__(self, feature):
+        shape, props, fid = feature
+        local = defaultdict(lambda: None)
+        local.update(props)
+        return eval(self.fn, {}, local)
 
 
 # intercut takes features from a base layer and cuts each
@@ -1165,6 +1210,14 @@ def _intercut_impl(intersect_func, feature_layers,
 # - keep_geom_type: if truthy, then filter the output to be
 #     the same type as the input. defaults to True, because
 #     this seems like an eminently sensible behaviour.
+# - base_where: if truthy, a Python expression which is
+#     evaluated in the context of a feature's properties and
+#     can return True if the feature is to be cut and False
+#     if it should be passed through unmodified.
+# - cutting_where: if truthy, a Python expression which is
+#     evaluated in the context of a feature's properties and
+#     can return True if the feature is to be used for cutting
+#     and False if it should be ignored.
 #
 # returns a feature layer which is the base layer cut by the
 # cutting layer.
@@ -1189,10 +1242,19 @@ def intercut(ctx):
     target_attribute = ctx.params.get('target_attribute')
     cutting_attrs = ctx.params.get('cutting_attrs')
     keep_geom_type = ctx.params.get('keep_geom_type', True)
+    base_where = ctx.params.get('base_where')
+    cutting_where = ctx.params.get('cutting_where')
+
+    # compile the where-clauses, if any were configured
+    if base_where:
+        base_where = Where(base_where)
+    if cutting_where:
+        cutting_where = Where(cutting_where)
 
     return _intercut_impl(
         _intersect_cut, feature_layers, base_layer, cutting_layer,
-        attribute, target_attribute, cutting_attrs, keep_geom_type)
+        attribute, target_attribute, cutting_attrs, keep_geom_type,
+        base_filter_fn=base_where, cutting_filter_fn=cutting_where)
 
 
 # overlap measures the area overlap between each feature in
@@ -1232,6 +1294,8 @@ def overlap(ctx):
     cutting_attrs = ctx.params.get('cutting_attrs')
     keep_geom_type = ctx.params.get('keep_geom_type', True)
     min_fraction = ctx.params.get('min_fraction', 0.8)
+    base_where = ctx.params.get('base_where')
+    cutting_where = ctx.params.get('cutting_where')
 
     # use a different function for linear overlaps (i.e: roads with polygons)
     # than area overlaps. keeping this explicit (rather than relying on the
@@ -1243,10 +1307,17 @@ def overlap(ctx):
     else:
         overlap_fn = _intersect_overlap(min_fraction)
 
+    # compile the where-clauses, if any were configured
+    if base_where:
+        base_where = Where(base_where)
+    if cutting_where:
+        cutting_where = Where(cutting_where)
+
     return _intercut_impl(
         overlap_fn, feature_layers, base_layer,
         cutting_layer, attribute, target_attribute, cutting_attrs,
-        keep_geom_type)
+        keep_geom_type, cutting_filter_fn=cutting_where,
+        base_filter_fn=base_where)
 
 
 # intracut cuts a layer with a set of features from that same
@@ -2403,9 +2474,12 @@ def drop_properties(ctx):
     """
 
     properties = ctx.params.get('properties')
+    all_name_variants = ctx.params.get('all_name_variants', False)
     assert properties, 'drop_properties: missing properties'
 
     def action(p):
+        if all_name_variants and 'name' in properties:
+            p = _remove_names(p)
         return _remove_properties(p, *properties)
 
     return _project_properties(ctx, action)
@@ -3175,7 +3249,7 @@ def quantize_height_round_nearest_meter(height):
     return round(height)
 
 
-def _merge_lines(linestring_shapes):
+def _merge_lines(linestring_shapes, _unused_tolerance):
     list_of_linestrings = []
     for shape in linestring_shapes:
         list_of_linestrings.extend(_flatten_geoms(shape))
@@ -3245,7 +3319,7 @@ def _drop_small_outers_multi(shape, area_tolerance):
     return shape
 
 
-def _merge_polygons(polygon_shapes):
+def _merge_polygons(polygon_shapes, tolerance):
     """
     Merge a list of polygons together into a single shape. Returns list of
     shapes, which might be empty.
@@ -3261,9 +3335,36 @@ def _merge_polygons(polygon_shapes):
     if not list_of_polys:
         return []
 
-    result = shapely.ops.unary_union(list_of_polys)
+    # first, try to merge the polygons as they are.
+    try:
+        result = shapely.ops.unary_union(list_of_polys)
+        return [result]
 
-    return [result]
+    except ValueError:
+        pass
+
+    # however, this can lead to numerical instability where polygons _almost_
+    # touch, so sometimes buffering them outwards a little bit can help.
+    try:
+        from shapely.geometry import JOIN_STYLE
+
+        # don't buffer by the full pixel, instead choose a smaller value that
+        # shouldn't be noticable.
+        buffer_size = tolerance / 16.0
+
+        list_of_buffered = [
+            p.buffer(buffer_size, join_style=JOIN_STYLE.mitre, mitre_limit=1.5)
+            for p in list_of_polys
+        ]
+        result = shapely.ops.unary_union(list_of_buffered)
+        return [result]
+
+    except ValueError:
+        pass
+
+    # ultimately, if it's not possible to merge them then bail.
+    # TODO: when we get a logger in here, let's log a big FAIL message.
+    return []
 
 
 def _merge_polygons_with_buffer(polygon_shapes, tolerance):
@@ -3293,7 +3394,7 @@ def _merge_polygons_with_buffer(polygon_shapes, tolerance):
     # opposing sides of the polygon meet eachother exactly.
     epsilon = tolerance * 1.0e-6
 
-    result = _merge_polygons(polygon_shapes)
+    result = _merge_polygons(polygon_shapes, tolerance)
     if not result:
         return result
 
@@ -3364,12 +3465,14 @@ def _intersects_bounds(a, b):
 #           either calls to leaf() or node().
 #   * root: called once at the root with the results of the top node (or leaf
 #           if it's a degenerate single-level tree).
+#   * tolerance: a length that is approximately a pixel, or the size by which
+#                things can be simplified or snapped to.
 #
 # These allow us to merge transformed versions of geometry, where leaf()
 # transforms the geometry to some other form (e.g: buffered for buildings),
 # node merges those recursively, and then root reverses the buffering.
 #
-RecursiveMerger = namedtuple('RecursiveMerger', 'leaf node root')
+RecursiveMerger = namedtuple('RecursiveMerger', 'leaf node root tolerance')
 
 
 # A bucket used to sort shapes into the next level of the quad tree.
@@ -3412,9 +3515,9 @@ def _merge_shapes_recursively(shapes, shapes_per_merge, merger, depth=0,
     # of shapes by 5 levels down, then perhaps there are particularly large
     # shapes which are preventing things getting split up correctly.
     if len(shapes) <= shapes_per_merge and depth == 0:
-        return merger.root(merger.leaf(shapes))
+        return merger.root(merger.leaf(shapes, merger.tolerance))
     elif depth >= 5:
-        return merger.leaf(shapes)
+        return merger.leaf(shapes, merger.tolerance)
 
     # on the first call, figure out what the bounds of the shapes are. when
     # recursing, use the bounds passed in from the parent.
@@ -3457,7 +3560,7 @@ def _merge_shapes_recursively(shapes, shapes_per_merge, merger, depth=0,
 
         # don't add empty lists!
         elif bucket.shapes:
-            grouped_shapes.extend(merger.leaf(bucket.shapes))
+            grouped_shapes.extend(merger.leaf(bucket.shapes, merger.tolerance))
 
     fn = merger.root if depth == 0 else merger.node
     return fn(grouped_shapes)
@@ -3468,7 +3571,7 @@ def _noop(x):
 
 
 def _merge_features_by_property(
-        features, geom_dim,
+        features, geom_dim, tolerance,
         update_props_pre_fn=None,
         update_props_post_fn=None,
         max_merged_features=None,
@@ -3527,7 +3630,8 @@ def _merge_features_by_property(
             # them all to have duplicate IDs.
             fid = None
 
-        merger = RecursiveMerger(root=_noop, node=_noop, leaf=_merge_shape_fn)
+        merger = RecursiveMerger(root=_noop, node=_noop, leaf=_merge_shape_fn,
+                                 tolerance=tolerance)
 
         for merged_shape in _merge_shapes_recursively(
                 shapes, shapes_per_merge, merger):
@@ -3637,12 +3741,10 @@ def merge_building_features(ctx):
             props['volume'] = height * area
         return props
 
-    def _merge_polygons(shapes):
-        return _merge_polygons_with_buffer(shapes, tolerance)
-
     layer['features'] = _merge_features_by_property(
-        layer['features'], _POLYGON_DIMENSION, _props_pre, _props_post,
-        max_merged_features, merge_shape_fn=_merge_polygons)
+        layer['features'], _POLYGON_DIMENSION, tolerance, _props_pre,
+        _props_post, max_merged_features,
+        merge_shape_fn=_merge_polygons_with_buffer)
     return layer
 
 
@@ -3707,15 +3809,13 @@ def merge_polygon_features(ctx):
                     merged_props['min_zoom'] = min_zoom
         return merged_props
 
-    def _merge_polygons(shapes):
-        return _merge_polygons_with_buffer(shapes, tolerance)
-
     merge_props_fn = _props_merge if merge_min_zooms else None
-    merge_shape_fn = _merge_polygons if buffer_merge else None
+    merge_shape_fn = _merge_polygons_with_buffer if buffer_merge else None
 
     layer['features'] = _merge_features_by_property(
-        layer['features'], _POLYGON_DIMENSION, _props_pre, _props_post,
-        merge_props_fn=merge_props_fn, merge_shape_fn=merge_shape_fn)
+        layer['features'], _POLYGON_DIMENSION, tolerance, _props_pre,
+        _props_post, merge_props_fn=merge_props_fn,
+        merge_shape_fn=merge_shape_fn)
     return layer
 
 
@@ -3912,7 +4012,8 @@ def _simplify_line_collection(shape, tolerance):
     return shape
 
 
-def _merge_junctions(features, angle_tolerance, simplify_tolerance):
+def _merge_junctions(features, angle_tolerance, simplify_tolerance,
+                     split_threshold):
     """
     Merge LineStrings within MultiLineStrings within features across junction
     boundaries where the lines appear to continue at the same angle.
@@ -3923,6 +4024,9 @@ def _merge_junctions(features, angle_tolerance, simplify_tolerance):
     Finally, group the lines into non-overlapping sets, each of which generates
     a separate MultiLineString feature to ensure they're already simple and
     further geometric operations won't re-introduce intersection points.
+
+    Large linestrings, with more than split_threshold members, use a slightly
+    different algorithm which is more efficient at very large sizes.
 
     Returns a new list of features.
     """
@@ -3936,7 +4040,8 @@ def _merge_junctions(features, angle_tolerance, simplify_tolerance):
             shape = _simplify_line_collection(shape, simplify_tolerance)
 
         if shape.geom_type == 'MultiLineString':
-            disjoint_shapes = _linestring_nonoverlapping_partition(shape)
+            disjoint_shapes = _linestring_nonoverlapping_partition(
+                shape, split_threshold)
             for disjoint_shape in disjoint_shapes:
                 new_features.append((disjoint_shape, props, None))
 
@@ -3946,7 +4051,108 @@ def _merge_junctions(features, angle_tolerance, simplify_tolerance):
     return new_features
 
 
-def _linestring_nonoverlapping_partition(mls):
+def _first_positive_integer_not_in(s):
+    """
+    Given a set of positive integers, s, return the smallest positive integer
+    which is _not_ in s.
+
+    For example:
+
+    >>> _first_positive_integer_not_in(set())
+    1
+    >>> _first_positive_integer_not_in(set([1]))
+    2
+    >>> _first_positive_integer_not_in(set([1,3,4]))
+    2
+    >>> _first_positive_integer_not_in(set([1,2,3,4]))
+    5
+    """
+
+    if len(s) == 0:
+        return 1
+
+    last = max(s)
+    for i in xrange(1, last):
+        if i not in s:
+            return i
+    return last + 1
+
+
+# utility class so that we can store the array index of the geometry
+# inside the shape index.
+class _geom_with_index(object):
+    def __init__(self, geom, index):
+        self.geom = geom
+        self.index = index
+        self._geom = geom._geom
+        self.is_empty = geom.is_empty
+
+
+class OrderedSTRTree(object):
+    """
+    An STR-tree geometry index which remembers the array index of the
+    geometries it was built with, and only returns geometries with lower
+    indices when queried.
+
+    This is used as a substitute for a dynamic index, where we'd be able
+    to add new geometries as the algorithm progressed.
+    """
+
+    def __init__(self, geoms):
+        self.shape_index = STRtree([
+            _geom_with_index(g, i) for i, g in enumerate(geoms)
+        ])
+
+    def query(self, shape, idx):
+        """
+        Return the index elements which have bounding boxes intersecting the
+        given shape _and_ have array indices less than idx.
+        """
+
+        for geom in self.shape_index.query(shape):
+            if geom.index < idx:
+                yield geom
+
+
+class SplitOrderedSTRTree(object):
+    """
+    An ordered STR-tree index which splits the geometries it is managing.
+
+    This is a simple, first-order approximation to a dynamic index. If the
+    input geometries are sorted by increasing size, then the "small" first
+    section are much less likely to overlap, and we know we're not interested
+    in anything in the "big" section because the index isn't large enough.
+
+    This should cut down the number of expensive queries, as well as the
+    number of subsequent intersection tests to check if the shapes within the
+    bounding boxes intersect.
+    """
+
+    def __init__(self, geoms):
+        split = int(0.75 * len(geoms))
+        self.small_index = STRtree([
+            _geom_with_index(g, i) for i, g in enumerate(geoms[0:split])
+        ])
+        self.big_index = STRtree([
+            _geom_with_index(g, i + split) for i, g in enumerate(geoms[split:])
+        ])
+        self.split = split
+
+    def query(self, shape, i):
+        for geom in self.small_index.query(shape):
+            if geom.index < i:
+                yield geom
+
+        # don't need to query the big index at all unless i >= split. this
+        # should cut down on the number of yielded items that need further
+        # intersection tests.
+        if i >= self.split:
+            for geom in self.big_index.query(shape):
+                if geom.index < i:
+                    yield geom
+
+
+def _linestring_nonoverlapping_partition(mls, split_threshold=15000):
     """
     Given a MultiLineString input, returns a list of MultiLineStrings
     which are individually simple, but cover all the points in the
@@ -3969,35 +4175,6 @@ def _linestring_nonoverlapping_partition(mls):
     # only interested in MultiLineStrings for this method!
     assert mls.geom_type == 'MultiLineString'
 
-    class _Bucket(object):
-        def __init__(self, first_shape):
-            self.shapes = [first_shape]
-            self.bounds = first_shape.bounds
-
-        def add(self, shape):
-            """
-            If the shape doesn't intersect any other shape in the bucket,
-            then add it and return True. Otherwise return False.
-            """
-
-            assert shape.geom_type == 'LineString'
-
-            bounds = shape.bounds
-            if _intersects_bounds(self.bounds, bounds):
-                for s in self.shapes:
-                    if s.intersects(shape):
-                        return False
-
-            self.shapes.append(shape)
-            self.bounds = _union_bounds(self.bounds, bounds)
-            return True
-
-        def as_shape(self):
-            if len(self.shapes) == 1:
-                return self.shapes[0]
-            else:
-                return MultiLineString(self.shapes)
-
     # simple (and sub-optimal) greedy algorithm for making sure that
     # linestrings don't intersect: put each into the first bucket which
     # doesn't already contain a linestring which intersects it.
@@ -4018,19 +4195,71 @@ def _linestring_nonoverlapping_partition(mls):
     # of 3 buckets. optimally, we can bucket 1 & 3 together and 2 & 4
     # together to only use 2 buckets. however, making this optimal seems
     # like it might be a Hard problem.
-    buckets = []
-    for shape in sorted(mls.geoms, key=lambda l: l.bounds[0]):
-        for bucket in buckets:
-            if bucket.add(shape):
-                break
-        else:
-            # if it didn't fit in any existing bucket, then make a new
-            # bucket for it.
-            buckets.append(_Bucket(shape))
+    #
+    # note that we don't create physical buckets, but assign each shape a
+    # bucket ID which hasn't been assigned to any other intersecting shape.
+    # we can assign these in an arbitrary order, and use an index to reduce
+    # the number of intersection tests needed down to O(n log n). this can
+    # matter quite a lot at low zooms, where it's possible to get 150,000
+    # tiny road segments in a single shape!
+
+    # sort the geometries before we use them. this can help if we sort things
+    # which have fewer intersections towards the front of the array, so that
+    # they can be done more quickly.
+    def _bbox_area(geom):
+        minx, miny, maxx, maxy = geom.bounds
+        return (maxx - minx) * (maxy - miny)
+
+    # if there's a large number of geoms, switch to the split index and sort
+    # so that the spatially largest objects are towards the end of the list.
+    # this should make it more likely that earlier queries are fast.
+    if len(mls.geoms) > split_threshold:
+        geoms = sorted(mls.geoms, key=_bbox_area)
+        shape_index = SplitOrderedSTRTree(geoms)
+    else:
+        geoms = mls.geoms
+        shape_index = OrderedSTRTree(geoms)
+
+    # first, assign everything the "null" bucket with index zero. this means
+    # we haven't gotten around to it yet, and we can use it as a sentinel
+    # value to check for logic errors.
+    bucket_for_shape = [0] * len(geoms)
+
+    for idx, shape in enumerate(geoms):
+        overlapping_buckets = set()
+
+        # assign the lowest bucket ID that hasn't been assigned to any
+        # overlapping shape with a lower index. this is because:
+        #  1. any overlapping shape would cause the insertion of a point if it
+        #     were allowed in this bucket, and
+        #  2. we're assigning in-order, so shapes at higher array indexes will
+        #     still be assigned to the null bucket. we'll get to them later!
+        for indexed_shape in shape_index.query(shape, idx):
+            if indexed_shape.geom.intersects(shape):
+                bucket = bucket_for_shape[indexed_shape.index]
+                assert bucket > 0
+                overlapping_buckets.add(bucket)
+
+        bucket_for_shape[idx] = _first_positive_integer_not_in(
+            overlapping_buckets)
 
     results = []
-    for bucket in buckets:
-        results.append(bucket.as_shape())
+    for bucket_id in set(bucket_for_shape):
+        # by this point, no shape should be assigned to the null bucket any
+        # more.
+        assert bucket_id > 0
+
+        # collect all the shapes which have been assigned to this bucket.
+        shapes = []
+        for idx, shape in enumerate(geoms):
+            if bucket_for_shape[idx] == bucket_id:
+                shapes.append(shape)
+
+        if len(shapes) == 1:
+            results.append(shapes[0])
+        else:
+            results.append(MultiLineString(shapes))
+
     return results
 
 
@@ -4081,6 +4310,8 @@ def merge_line_features(ctx):
         'drop_length_pixels', default=0.1, typ=float)
     simplify_tolerance = params.optional(
         'simplify_tolerance', default=0.0, typ=float)
+    split_threshold = params.optional(
+        'split_threshold', default=15000, typ=int)
 
     assert source_layer, 'merge_line_features: missing source layer'
     layer = _find_layer(ctx.feature_layers, source_layer)
@@ -4093,7 +4324,7 @@ def merge_line_features(ctx):
         return None
 
     layer['features'] = _merge_features_by_property(
-        layer['features'], _LINE_DIMENSION)
+        layer['features'], _LINE_DIMENSION, simplify_tolerance)
 
     if drop_short_segments:
         tolerance = short_segment_factor * tolerance_for_zoom(zoom)
@@ -4102,7 +4333,8 @@ def merge_line_features(ctx):
 
     if merge_junctions:
         layer['features'] = _merge_junctions(
-            layer['features'], junction_angle_tolerance, simplify_tolerance)
+            layer['features'], junction_angle_tolerance, simplify_tolerance,
+            split_threshold)
 
     return layer
 

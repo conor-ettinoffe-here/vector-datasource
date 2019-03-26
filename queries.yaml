@@ -1052,6 +1052,11 @@ post_process:
       source_layer: roads
       start_zoom: 0
       end_zoom: 12
+      # this means remove all the names if "name" is one of the properties
+      # we're dropping. in other words, allows us to use "name" as a short-
+      # hand for name:XX, official_name, old_name, etc... without having to
+      # spell all of them out at length.
+      all_name_variants: true
       properties:
         - name
         - ref
@@ -1062,6 +1067,9 @@ post_process:
       source_layer: roads
       start_zoom: 0
       end_zoom: 15
+      # short-hand for "name" property in the list below means all name-like
+      # properties.
+      all_name_variants: true
       properties:
         - name
         - ref
@@ -1202,6 +1210,9 @@ post_process:
       source_layer: roads
       start_zoom: 7
       end_zoom: 11
+      # short-hand for "name" property in the list below means all name-like
+      # properties.
+      all_name_variants: true
       properties:
         - name
         - all_networks
@@ -1210,12 +1221,11 @@ post_process:
         kind == 'major_road'
   # this is a patch to get rid of name, but keep ref & network, for highways
   # when zoom < 11.
-  - fn: vectordatasource.transform.drop_properties
+  - fn: vectordatasource.transform.drop_names
     params:
       source_layer: roads
       start_zoom: 7
       end_zoom: 11
-      properties: [name]
       where: >-
         kind == 'highway'
   # drop name, ref and the multi-shield properties, but keep single-shield
@@ -1225,6 +1235,9 @@ post_process:
       source_layer: roads
       start_zoom: 0
       end_zoom: 7
+      # short-hand for "name" property in the list below means all name-like
+      # properties.
+      all_name_variants: true
       properties:
         - name
         - ref
@@ -1499,6 +1512,32 @@ post_process:
       end_zoom: 14
       source_layers: [water]
       pixel_area: 0.1
+
+  # merge aerodrome kind_detail onto runway lines
+  - fn: vectordatasource.transform.overlap
+    params:
+      base_layer: roads
+      cutting_layer: landuse
+      attribute: kind_detail
+      target_attribute: aerodrome_kind_detail
+      linear: true
+      base_where: >-
+        kind == 'aeroway' and kind_detail == 'runway'
+      cutting_where: >-
+        kind == 'aerodrome' and kind_detail is not None
+
+  # merge aerodrome kind_detail onto runway polygons
+  - fn: vectordatasource.transform.overlap
+    params:
+      base_layer: landuse
+      cutting_layer: landuse
+      attribute: kind_detail
+      target_attribute: kind_detail
+      linear: true
+      base_where: >-
+        kind == 'runway'
+      cutting_where: >-
+        kind == 'aerodrome' and kind_detail is not None
 
   # drop this layer before simplify_and_clip - we don't want it in the output,
   # so don't waste time simplifying and clipping it to the tile.

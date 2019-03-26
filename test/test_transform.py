@@ -565,8 +565,10 @@ class DropMergedIdTest(unittest.TestCase):
         def _drop_all_props((shape, props, fid)):
             return None
 
+        tolerance = 1.0e-4
         merged_features = _merge_features_by_property(
-            buildings, _POLYGON_DIMENSION, update_props_pre_fn=_drop_all_props)
+            buildings, _POLYGON_DIMENSION, tolerance,
+            update_props_pre_fn=_drop_all_props)
 
         self.assertEquals(2, len(merged_features))
         for f in merged_features:
@@ -1018,3 +1020,41 @@ class AngleAtTest(unittest.TestCase):
 
     def test_angle_at_degenerate(self):
         self._check([[0, 0], [0, 0]], None)
+
+
+class FirstPositiveIntegerNotInTest(unittest.TestCase):
+
+    def _check(self, value, expect):
+        from vectordatasource.transform import _first_positive_integer_not_in
+        self.assertEqual(_first_positive_integer_not_in(value), expect)
+
+    def test_empty(self):
+        self._check(set(), 1)
+
+    def test_one(self):
+        self._check(set([1]), 2)
+
+    def test_hole(self):
+        self._check(set([1, 3, 4]), 2)
+
+    def test_filled_hole(self):
+        self._check(set([1, 2, 3, 4]), 5)
+
+
+class BuildingHeightCalculation(unittest.TestCase):
+
+    def test_nonsense_height(self):
+        # test that a nonsensically large value for a height input
+        # doesn't get returned in the output.
+        from vectordatasource.transform import _building_calc_height
+        from vectordatasource.transform import _building_calc_levels
+        height = _building_calc_height('1e6', None, _building_calc_levels)
+        self.assertIsNone(height)
+
+    def test_nonsense_levels(self):
+        # test that a nonsensically large value for the number of levels in
+        # a building doesn't get into the output.
+        from vectordatasource.transform import _building_calc_height
+        from vectordatasource.transform import _building_calc_levels
+        height = _building_calc_height(None, '1000', _building_calc_levels)
+        self.assertIsNone(height)

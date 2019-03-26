@@ -5,8 +5,7 @@ SELECT
 
   -- common properties across all layers
   to_jsonb(tags) || jsonb_build_object(
-    'source', 'openstreetmap.org',
-    'area', 0
+    'source', 'openstreetmap.org'
   ) AS __properties__,
 
   CASE WHEN mz_building_min_zoom IS NOT NULL
